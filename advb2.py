@@ -1,139 +1,81 @@
-# Adv DB Winter 2024 - 1
 import pandas as pd
-import numbers
-import os.path
-import random
+import sqlite3
+import os
 
-data_base = []  # Global binding for the Database contents
-'''
-transactions = [['id1',' attribute2', 'value1'], ['id2',' attribute2', 'value2'],
-                ['id3', 'attribute3', 'value3']]
-'''
-transactions = [['1', 'Department', 'Music'], ['5', 'Civil_status', 'Divorced'],
-                ['15', 'Salary', '200000']]
+# Set the current working directory to the "relation" folder
+os.chdir('./Relations')
 
-DB_Log = [] # <-- You WILL populate this as you go
+# Read the CSV files into pandas DataFrames
+works_df = pd.read_csv('workson.csv')
+salaries_df = pd.read_csv('salary.csv')
+employees_df = pd.read_csv('employee.csv')
+supervise_df = pd.read_csv('supervise.csv')
+department_df = pd.read_csv('department.csv')
+project_df = pd.read_csv('project.csv')
+male_df = pd.read_csv('male.csv')
+female_df = pd.read_csv('female.csv')
 
-def recovery_script(log:list, failing_transaction_index, database): 
-    '''
-    Restore the database to stable and sound condition, by processing the DB log.
-    '''
-    print("Calling your recovery script with DB_Log as an argument.")
-    print("Recovery in process ...\n")
+# Create an SQLite database connection
+conn = sqlite3.connect(':memory:')  # Use ':memory:' to create an in-memory database
 
-    #Setting up variables to assist in tracking down the appropriate variables to search rows and columns with
-    revertID = (failing_transaction_index - 1)
-    transitionRevert = transactions[(revertID)]
-    transactionID = (int((transitionRevert[0])) - 1)
-
-    
-    #Reversion of transaction
-    database.loc[(transactionID), transitionRevert[1]] = log[revertID]["Prev"]
-   
-    print(database)
-    pass
-
-def transaction_processing(index, database, failure, failing_transaction_index, isexecuted):  # Pass failure variable to the transaction_processing function
-    '''
-    1. Process transaction in the transaction queue.
-    2. Updates DB_Log accordingly
-    3. This function does NOT commit the updates, just execute them
-    '''
-    # save record before alteration of it
-
-        # getting the transition currently being used via index
-    transitionInPlay = transactions[index]
-
-    # changes the transition id to an int and finds the corresponding row
-    transactionid = int(transitionInPlay[0])
-    rowID = (transactionid - 1)
-    transition = database['Unique_ID'] == transactionid
-    row_index = database.index[transition]
-    #we use this to set non executed transactions to have the non executed status
-    if (isexecuted) :
-        # updates the row and adds message to DB_Log
-        status = 'committed'  # Default status
-        # Check if the transaction should be rolled-back or not-executed
-        if failure and (failing_transaction_index is not None) and (index + 1) > failing_transaction_index:
-            status = 'rolled-back'
-    else:
-        status = 'not-executed'
-
-    # Create the changelog dictionary with the appropriate status
-    changelog = {'id': rowID, 'Prev': database.loc[rowID, transitionInPlay[1]], 
-                 'Change': transitionInPlay[2], 'Status': status}
-    
-    # Locating the row that needs to be changed and making the change via information in transactions array
-    database.loc[row_index, transitionInPlay[1]] = transitionInPlay[2]
-    DB_Log.append(changelog)
-    
-def create_csv(data_base):
-    #Reading requirements, thought to create an alternative CSV generator
-    #Not sure if this is the right thing to do 
-    exists = os.path.exists('CodeAndData\Employees_DB_ADV_2.csv')
-    if not exists: 
-        writer = data_base.to_csv('CodeAndData\Employees_DB_ADV_2.csv', index=False)
-        exists = os.path.exists('CodeAndData\Employees_DB_ADV_2.csv')
-        print(f"File does not exist, code to create alternative CS \n Should now exist as {exists}")
-    else: 
-       print("If this prints alt DB (where transactions will affect) already exists")
+# Load the DataFrames into SQLite as tables
+works_df.to_sql('workson', conn, index=False)
+salaries_df.to_sql('salary', conn, index=False)
+employees_df.to_sql('employee', conn, index=False)
+supervise_df.to_sql('supervise', conn, index=False)
+department_df.to_sql('department', conn, index=False)
+project_df.to_sql('project', conn, index=False)
+male_df.to_sql('male', conn, index=False)
+female_df.to_sql('female', conn, index=False)
 
 
-def is_there_a_failure()->bool:
-    '''
-    Simulates randomly a failure, returning True or False, accordingly
-    '''
-    value = random.randint(0,1)
-    if value == 1:
-        result = True
-    else:
-        result = False
-    return result
+# Define SQL queries
+queries = [
+     """
+    SELECT female.Name
+    FROM female
+    INNER JOIN workson ON female.name = workson.name
+    INNER JOIN supervise ON supervise.subordinate = female.name
+    WHERE workson.PROJECT = 'computerization'
+    AND workson.effort = 10
+    AND supervise.supervisor = "jennifer";
+    """,
+    """
+    SELECT salary.employee_name
+    FROM salary
+    INNER JOIN department ON department.employee_name = salary.employee_name
+    WHERE salary > 40000
+    AND department.department = "research";
+    """,
+    """
+    SELECT employee.EMPLOYEE_NAME
+    FROM employee
+    EXCEPT
+    SELECT supervise.subordinate
+    FROM supervise;
+    """,
+    """
+    SELECT workson.NAME
+    FROM workson
+    WHERE PROJECT = 'productx'
+    AND EFFORT >= 20;
+    """
+]
+
+
+
 
 def main():
     #get number of total transactions, which is always 3
-    number_of_transactions = len(transactions)
-    must_recover = False
-    data_base = pd.read_csv('CodeAndData\Employees_DB_ADV.csv')
-    failing_transaction_index = 0
 
-    
-    for index in range(number_of_transactions):
-        # call the failure function to check if failure
-        failure = is_there_a_failure()
-        print(f"\nProcessing transaction No. {index+1}.")  
-        #we call transaction_processing, and always set the last as true as these transactions are being executed
-        transaction_processing(index, data_base, failure, failing_transaction_index, True)  # Pass failure variable to the transaction_processing function
-        print("UPDATES have not been committed yet...\n")
-        print("database")
-        print(data_base)
-        
-        if failure:
-            must_recover = True
-            failing_transaction_index = index + 1
-            print(f'There was a failure whilst processing transaction No. {failing_transaction_index}.')
-            break
-        else:
-            print(f'Transaction No. {index+1} has been commited! Changes are permanent.')
-            
-                
-    if must_recover:
-        recovery_script(DB_Log, failing_transaction_index, data_base)
-        
-    else:
-        # All transactiones ended up well
-        print("All transaction ended up well.")
-        print("Updates to the database were committed!\n")
 
-    print('\n The data entries AFTER updates and potential recovery are presented below: \n')
-    create_csv(data_base)
-    #If transactions do not get completed, we call the processing function and set the last parameter as false to indicate its non exectured and add to DB_Log
-    transactionindex = index + 1
-    while (transactionindex > 0 and transactionindex < 3):
-         transaction_processing(transactionindex, data_base, False, None, False)
-         transactionindex = (transactionindex + 1)
-    for transaction in DB_Log:
-        print(f"Transaction ID: {transaction['id']}, Attribute: {transaction['Prev']} -> {transaction['Change']}, Status: {transaction['Status']}")
-    
+
+
+# Execute the queries and display the results
+    for i, query in enumerate(queries, 1):
+        print(f"Query {i}:")
+        result = pd.read_sql_query(query, conn)
+        print(result)
+        print()
 
 main()
